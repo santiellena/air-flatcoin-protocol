@@ -14,6 +14,7 @@ contract AirEngine is ReentrancyGuard {
     error AirEngine__MintTransactionFailed();
     error AirEngine__BurnedAmountCannotBeGreaterThanAmountMinted();
     error AirEngine__HealthFactorIsBroken();
+    error AirEngine__HealthFactorMustBeBrokenToLiquidate();
 
     // State Variables Section
     AirToken private immutable i_AIR;
@@ -31,7 +32,7 @@ contract AirEngine is ReentrancyGuard {
     mapping(address user => uint256 amount) private s_userToAmountMinted;
 
     // AIR PRICE
-    uint256 public airPrice;
+    uint256 private s_airPriceInUsd;
 
     // Events Section
     event CollateradDeposited(address indexed user, address indexed token, uint256 amount);
@@ -64,10 +65,42 @@ contract AirEngine is ReentrancyGuard {
         i_collateralTokenAddress = collateralTokenAddress;
         i_collateralUsdPriceFeedAddress = collateralUsdPriceFeedAddress;
         i_AIR = AirToken(AirAddress);
-        airPrice = initialAirPrice;
+        s_airPriceInUsd = initialAirPrice;
     }
 
     // External Functions Section
+
+    /**
+     * @param user Address of the user who is breaking the helath factor
+     * @param debtToCover Amount of AIR you want to burn to improve the user's health factor
+     * @notice You can partially liquidate a user
+     * @notice You will receive a bonus for liquidating a user's debt
+     */
+    function liquidate(address user, uint256 debtToCover) external moreThanZero(debtToCover) nonReentrant {
+        uint256 startingUserHealthFactor = _healthFactor(user);
+
+        if (startingUserHealthFactor >= MINIMUM_HEALTH_FACTOR) {
+            revert AirEngine__HealthFactorMustBeBrokenToLiquidate();
+        }
+
+        uint256 debtToCoverInUsd = (debtToCover * s_airPriceInUsd) / PRECISION;
+        uint256 tokenAmountFromDebtCovered = getCollateralTokenAmountFromUsd(debtToCoverInUsd);
+        // tokenAmountFromDebtCovered is the amount to give to the user without taking into account the bonus
+
+        uint256 bonusCollateral = (tokenAmountFromDebtCovered * LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
+
+        uint256 totalCollateralToRedeem = tokenAmountFromDebtCovered + bonusCollateral;
+
+        _redeemCollateral(totalCollateralToRedeem, user, msg.sender);
+
+        _burnAir(debtToCover, user, msg.sender);
+
+        uint256 endingHealthFactor = _healthFactor(user);
+        if (endingHealthFactor <= startingUserHealthFactor) {
+            revert AirEngine__HealthFactorMustBeBrokenToLiquidate();
+        }
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     function depositCollateralAndMintAir(uint256 amountCollateral, uint256 amountAirToMint) external {
         depositCollateral(amountCollateral);
@@ -127,6 +160,18 @@ contract AirEngine is ReentrancyGuard {
         _revertIfHealthFactorIsBroken(msg.sender);
     }
 
+    function getCollateralTokenAmountFromUsd(uint256 usdAmountInWei)
+        public
+        view
+        moreThanZero(usdAmountInWei)
+        returns (uint256)
+    {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(i_collateralTokenAddress);
+        (, int256 price,,,) = priceFeed.latestRoundData();
+
+        return (usdAmountInWei * PRECISION) / uint256(price * ADDITIONAL_FEED_PRECISION);
+    }
+
     // Internal & Private View Functions Section
 
     function _burnAir(uint256 amount, address debtor, address liquidator) private moreThanZero(amount) {
@@ -152,7 +197,7 @@ contract AirEngine is ReentrancyGuard {
         uint256 totalAirMinted = s_userToAmountMinted[user];
         uint256 collateralDeposited = s_userToAmountOfCollateralDeposited[user];
         collateralValueInUsd = getCollateralUsdValue(collateralDeposited);
-        totalAirMintedInUsd = totalAirMinted * airPrice;
+        totalAirMintedInUsd = totalAirMinted * s_airPriceInUsd;
 
         return (totalAirMinted, collateralValueInUsd);
     }
@@ -219,5 +264,21 @@ contract AirEngine is ReentrancyGuard {
         // price == actualTokenPrice * 1e8;
 
         return uint256(uint256(price * ADDITIONAL_FEED_PRECISION) * amount) / PRECISION;
+    }
+
+    function getAirPriceInUsd() public view returns (uint256) {
+        return s_airPriceInUsd;
+    }
+
+    function getCollateralTokenAddress() public view returns (address) {
+        return i_collateralTokenAddress;
+    }
+
+    function getAmountAirMinted() public view returns (uint256) {
+        return s_userToAmountMinted[msg.sender];
+    }
+
+    function getAmountOfCollateralDeposited() public view returns (uint256) {
+        return s_userToAmountOfCollateralDeposited[msg.sender];
     }
 }
