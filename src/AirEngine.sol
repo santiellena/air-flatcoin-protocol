@@ -32,7 +32,7 @@ contract AirEngine is ReentrancyGuard {
     mapping(address user => uint256 amount) private s_userToAmountMinted;
 
     // AIR PRICE
-    uint256 private s_airPriceInUsd;
+    uint256 private s_airPegPriceInUsd;
 
     // Events Section
     event CollateradDeposited(address indexed user, address indexed token, uint256 amount);
@@ -65,7 +65,7 @@ contract AirEngine is ReentrancyGuard {
         i_collateralTokenAddress = collateralTokenAddress;
         i_collateralUsdPriceFeedAddress = collateralUsdPriceFeedAddress;
         i_AIR = AirToken(AirAddress);
-        s_airPriceInUsd = initialAirPrice;
+        s_airPegPriceInUsd = initialAirPrice;
     }
 
     // External Functions Section
@@ -83,7 +83,7 @@ contract AirEngine is ReentrancyGuard {
             revert AirEngine__HealthFactorMustBeBrokenToLiquidate();
         }
 
-        uint256 debtToCoverInUsd = (debtToCover * s_airPriceInUsd) / PRECISION;
+        uint256 debtToCoverInUsd = (debtToCover * s_airPegPriceInUsd) / PRECISION;
         uint256 tokenAmountFromDebtCovered = getCollateralTokenAmountFromUsd(debtToCoverInUsd);
         // tokenAmountFromDebtCovered is the amount to give to the user without taking into account the bonus
 
@@ -197,7 +197,7 @@ contract AirEngine is ReentrancyGuard {
         uint256 totalAirMinted = s_userToAmountMinted[user];
         uint256 collateralDeposited = s_userToAmountOfCollateralDeposited[user];
         collateralValueInUsd = getCollateralUsdValue(collateralDeposited);
-        totalAirMintedInUsd = totalAirMinted * s_airPriceInUsd;
+        totalAirMintedInUsd = totalAirMinted * s_airPegPriceInUsd;
 
         return (totalAirMinted, collateralValueInUsd);
     }
@@ -267,7 +267,7 @@ contract AirEngine is ReentrancyGuard {
     }
 
     function getAirPriceInUsd() public view returns (uint256) {
-        return s_airPriceInUsd;
+        return s_airPegPriceInUsd;
     }
 
     function getCollateralTokenAddress() public view returns (address) {
