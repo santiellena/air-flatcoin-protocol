@@ -5,6 +5,7 @@ import {AirToken} from "./AirToken.sol";
 import {ReentrancyGuard} from "@OpenZeppelin/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "@OpenZeppelin/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {Truflation} from "./Truflation.sol";
 
 contract AirEngine is ReentrancyGuard {
     // Errors Section
@@ -20,6 +21,7 @@ contract AirEngine is ReentrancyGuard {
     AirToken private immutable i_AIR;
     address private immutable i_collateralTokenAddress;
     address private immutable i_collateralUsdPriceFeedAddress;
+    TrueflationClient private immutable i_trueflationClient;
     // Price feed returns a number with 8 decimals and the whole system works with 18
     int256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
@@ -57,11 +59,13 @@ contract AirEngine is ReentrancyGuard {
 
     // Constructor Section
     constructor(
+        address trueflationClient,
         address collateralTokenAddress,
         address collateralUsdPriceFeedAddress,
         address AirAddress,
         uint256 initialAirPrice
     ) {
+        i_trueflationClient = trueflationClient;
         i_collateralTokenAddress = collateralTokenAddress;
         i_collateralUsdPriceFeedAddress = collateralUsdPriceFeedAddress;
         i_AIR = AirToken(AirAddress);
