@@ -5,7 +5,7 @@ import {AirToken} from "./AirToken.sol";
 import {ReentrancyGuard} from "@OpenZeppelin/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "@OpenZeppelin/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-import {Truflation} from "./Truflation.sol";
+import {TruflationInterface} from "../interfaces/TruflationInterface.sol";
 
 contract AirEngine is ReentrancyGuard {
     // Errors Section
@@ -21,7 +21,8 @@ contract AirEngine is ReentrancyGuard {
     AirToken private immutable i_AIR;
     address private immutable i_collateralTokenAddress;
     address private immutable i_collateralUsdPriceFeedAddress;
-    TrueflationClient private immutable i_trueflationClient;
+    address private immutable i_truflationClient;
+    address private immutable i_linkTokenAddress;
     // Price feed returns a number with 8 decimals and the whole system works with 18
     int256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
@@ -29,6 +30,7 @@ contract AirEngine is ReentrancyGuard {
     uint256 private constant LIQUIDATION_BONUS = 10; //10% bonus
     uint256 private constant LIQUIDATION_THRESHOLD = 50;
     uint256 private constant LIQUIDATION_PRECISION = 100;
+    uint256 private constant MINIMUM_LINK_TRANSFERENCE = 1e18;
 
     mapping(address user => uint256 amount) private s_userToAmountOfCollateralDeposited;
     mapping(address user => uint256 amount) private s_userToAmountMinted;
@@ -59,16 +61,18 @@ contract AirEngine is ReentrancyGuard {
 
     // Constructor Section
     constructor(
-        address trueflationClient,
+        address truflationClient,
         address collateralTokenAddress,
         address collateralUsdPriceFeedAddress,
+        address linkTokenAddress,
         address AirAddress,
         uint256 initialAirPrice
     ) {
-        i_trueflationClient = trueflationClient;
+        i_truflationClient = truflationClient;
         i_collateralTokenAddress = collateralTokenAddress;
         i_collateralUsdPriceFeedAddress = collateralUsdPriceFeedAddress;
         i_AIR = AirToken(AirAddress);
+        i_linkTokenAddress = linkTokenAddress;
         s_airPegPriceInUsd = initialAirPrice;
     }
 
@@ -245,6 +249,30 @@ contract AirEngine is ReentrancyGuard {
             revert AirEngine__TransferFailed();
         }
     }
+
+    function _updateDateInflation() internal {
+        IERC20(i_linkTokenAddress).transfer(i_truflationClient, MINIMUM_LINK_TRANSFERENCE);
+        TruflationInterface(i_truflationClient).requestDateInflation();
+    }
+
+    function _getDateInflation() internal returns (int256 dateInflation) {
+        _updateDateInflation();
+        dateInflation = TruflationInterface(i_truflationClient).getDateInflation();
+    }
+
+    function _updateAirPegPriceByInflation() internal {
+        int256 dateInflation = _getDateInflation();
+
+        int256 actualPrice = int256(s_airPegPriceInUsd);
+
+        require(actualPrice > 0);
+        // new price = old price * (1 + 0.inflation)
+        // 65 = 100 * (1 - 0.35) --> -0.35: negative inflation
+        // 650000 = 10000 * (100 - 35) --> adjusts with 0s and result is the same without precision
+        s_airPegPriceInUsd = uint256(actualPrice * (1e18 + dateInflation));
+    }
+
+    function _getDateFormated() internal {}
 
     // Public & External View Functions Section
 

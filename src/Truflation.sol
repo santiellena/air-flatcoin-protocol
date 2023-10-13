@@ -8,7 +8,7 @@ import "@chainlink/contracts/src/v0.8/ConfirmedOwner.sol";
 contract Truflation is ChainlinkClient, ConfirmedOwner {
     using Chainlink for Chainlink.Request;
 
-    string public yoyInflation;
+    int256 private dateInflation;
     address public oracleId;
     string public jobId;
     uint256 public fee;
@@ -24,21 +24,23 @@ contract Truflation is ChainlinkClient, ConfirmedOwner {
         fee = fee_;
     }
 
-    function requestYoyInflation() public returns (bytes32 requestId) {
+    function requestDateInflation() public returns (bytes32 requestId) {
         Chainlink.Request memory req =
-            buildChainlinkRequest(bytes32(bytes(jobId)), address(this), this.fulfillYoyInflation.selector);
-        req.add("service", "truflation/current");
-        req.add("keypath", "yearOverYearInflation");
-        req.add("abi", "json");
+            buildChainlinkRequest(bytes32(bytes(jobId)), address(this), this.fulfillDateInflation.selector);
+        req.add("service", "truflation/at-date");
+        req.add("keypath", "");
+        req.add("data", '{"date":"2021-10-05","location":"us"}'); // DATE HARDCODED JUST FOR DEVELOPMENT
+        req.add("abi", "int256");
+        req.add("multiplier", "1000000000000000000");
         req.add("refundTo", Strings.toHexString(uint160(msg.sender), 20));
         return sendChainlinkRequestTo(oracleId, req, fee);
     }
 
-    function fulfillYoyInflation(bytes32 _requestId, bytes memory _inflation)
+    function fulfillDateInflation(bytes32 _requestId, bytes memory _inflation)
         public
         recordChainlinkFulfillment(_requestId)
     {
-        yoyInflation = string(_inflation);
+        dateInflation = toInt256(_inflation);
     }
 
     function changeOracle(address _oracle) public onlyOwner {
@@ -62,43 +64,13 @@ contract Truflation is ChainlinkClient, ConfirmedOwner {
         require(link.transfer(msg.sender, link.balanceOf(address(this))), "Unable to transfer");
     }
 
-    /*
-    // The following are for retrieving inflation in terms of wei
-    // This is useful in situations where you want to do numerical
-    // processing of values within the smart contract
-
-    // This will require a int256 rather than a uint256 as inflation
-    // can be negative
-
-    int256 public inflationWei;
-    function requestInflationWei() public returns (bytes32 requestId) {
-    Chainlink.Request memory req = buildChainlinkRequest(
-      bytes32(bytes(jobId)),
-      address(this),
-      this.fulfillInflationWei.selector
-    );
-    req.add("service", "truflation/current");
-    req.add("keypath", "yearOverYearInflation");
-    req.add("abi", "int256");
-    req.add("multiplier", "1000000000000000000");
-    req.add("refundTo",
-      Strings.toHexString(uint160(msg.sender), 20));
-
-    return sendChainlinkRequestTo(oracleId, req, fee);
+    function getDateInflation() public view returns (int256) {
+        return dateInflation;
     }
 
-    function fulfillInflationWei(
-    bytes32 _requestId,
-    bytes memory _inflation
-    ) public recordChainlinkFulfillment(_requestId) {
-    inflationWei = toInt256(_inflation);
+    function toInt256(bytes memory _bytes) internal pure returns (int256 value) {
+        assembly {
+            value := mload(add(_bytes, 0x20))
+        }
     }
-
-    function toInt256(bytes memory _bytes) internal pure
-    returns (int256 value) {
-    assembly {
-      value := mload(add(_bytes, 0x20))
-    }
-    }
-    */
 }
