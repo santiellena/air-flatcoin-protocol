@@ -20,14 +20,14 @@ contract MockTruflation is ChainlinkClient, ConfirmedOwner {
         fee = fee_;
     }
 
-    function requestDateInflation() public returns (bytes32 requestId) {
-        int256 inflation = 5e17;
-        fulfillDateInflation(inflation);
-        return bytes32("JUST TO KEEP THE RETURNS");
+    function requestDateInflation(string memory date) public returns (bytes32 requestId) {
+        bytes memory inflationInBytes = abi.encode(1e17); // Inflation fixed to testing
+        fulfillDateInflation(inflationInBytes);
+        return bytes32(abi.encode(date));
     }
 
-    function fulfillDateInflation(int256 _inflation) public {
-        dateInflation = _inflation;
+    function fulfillDateInflation(bytes memory _inflation) public {
+        dateInflation = toInt256(_inflation);
     }
 
     function changeOracle(address _oracle) public onlyOwner {
