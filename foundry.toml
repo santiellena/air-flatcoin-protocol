@@ -6,6 +6,7 @@ remappings = [
     "@OpenZeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "@chainlink/=lib/chainlink/",
     "@solmate/=lib/solmate/src/",
+    "@solidity-datetime/=lib/solidity-datetime/",
 ]
 
 [invariant]

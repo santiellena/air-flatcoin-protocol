@@ -6,6 +6,8 @@ import {ReentrancyGuard} from "@OpenZeppelin/contracts/security/ReentrancyGuard.
 import {IERC20} from "@OpenZeppelin/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {TruflationInterface} from "../interfaces/TruflationInterface.sol";
+import {DateTime} from "@solidity-datetime/contracts/DateTime.sol";
+import {Strings} from "@OpenZeppelin/contracts/utils/Strings.sol";
 
 contract AirEngine is ReentrancyGuard {
     // Errors Section
@@ -65,13 +67,13 @@ contract AirEngine is ReentrancyGuard {
         address collateralTokenAddress,
         address collateralUsdPriceFeedAddress,
         address linkTokenAddress,
-        address AirAddress,
+        address airAddress,
         uint256 initialAirPrice
     ) {
         i_truflationClient = truflationClient;
         i_collateralTokenAddress = collateralTokenAddress;
         i_collateralUsdPriceFeedAddress = collateralUsdPriceFeedAddress;
-        i_AIR = AirToken(AirAddress);
+        i_AIR = AirToken(airAddress);
         i_linkTokenAddress = linkTokenAddress;
         s_airPegPriceInUsd = initialAirPrice;
     }
@@ -251,8 +253,9 @@ contract AirEngine is ReentrancyGuard {
     }
 
     function _updateDateInflation() internal {
+        string memory fulldate = _getDateFormated();
         IERC20(i_linkTokenAddress).transfer(i_truflationClient, MINIMUM_LINK_TRANSFERENCE);
-        TruflationInterface(i_truflationClient).requestDateInflation();
+        TruflationInterface(i_truflationClient).requestDateInflation(fulldate);
     }
 
     function _getDateInflation() internal returns (int256 dateInflation) {
@@ -272,7 +275,13 @@ contract AirEngine is ReentrancyGuard {
         s_airPegPriceInUsd = uint256(actualPrice * (1e18 + dateInflation));
     }
 
-    function _getDateFormated() internal {}
+    function _getDateFormated() internal view returns (string memory) {
+        (uint256 year, uint256 month, uint256 day) = DateTime.timestampToDate(block.timestamp);
+
+        // ISSUE: month or day are less than 10 so a zero (0) before the number must be added
+        return
+            string(abi.encodePacked(Strings.toString(year), "-", Strings.toString(month), "-", Strings.toString(day)));
+    }
 
     // Public & External View Functions Section
 

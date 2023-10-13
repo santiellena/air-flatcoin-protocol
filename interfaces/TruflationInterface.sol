@@ -2,7 +2,7 @@
 pragma solidity ^0.8.17;
 
 interface TruflationInterface {
-    function requestDateInflation() external returns (bytes32 requestId);
+    function requestDateInflation(string memory) external returns (bytes32 requestId);
 
     function fulfillDateInflation(bytes32 _requestId, bytes memory _inflation) external;
 
