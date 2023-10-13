@@ -29,7 +29,7 @@ contract Truflation is ChainlinkClient, ConfirmedOwner {
             buildChainlinkRequest(bytes32(bytes(jobId)), address(this), this.fulfillDateInflation.selector);
         req.add("service", "truflation/at-date");
         req.add("keypath", "");
-        req.add("data", '{"date":"2021-10-05","location":"us"}'); // DATE HARDCODED JUST FOR DEVELOPMENT
+        req.add("data", '{"date":"2023-10-05","location":"us"}'); // DATE HARDCODED JUST FOR DEVELOPMENT
         req.add("abi", "int256");
         req.add("multiplier", "1000000000000000000");
         req.add("refundTo", Strings.toHexString(uint160(msg.sender), 20));
