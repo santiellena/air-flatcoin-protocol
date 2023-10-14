@@ -8,7 +8,7 @@ import "@chainlink/contracts/src/v0.8/ConfirmedOwner.sol";
 contract Truflation is ChainlinkClient, ConfirmedOwner {
     using Chainlink for Chainlink.Request;
 
-    int256 private dateInflation;
+    int256 private rangeInflation;
     address public oracleId;
     string public jobId;
     uint256 public fee;
@@ -24,12 +24,16 @@ contract Truflation is ChainlinkClient, ConfirmedOwner {
         fee = fee_;
     }
 
-    function requestDateInflation(string memory date) public returns (bytes32 requestId) {
-        string memory data = string(abi.encodePacked('{"date":"', date, '","location":"us"}'));
+    function requestRangeInflation(string memory startDate, string memory endDate) public returns (bytes32 requestId) {
+        string memory data = string(
+            abi.encodePacked(
+                '{"interval":"day","', startDate, '":"2021-01-01","end-date":', endDate, ',"location":"us"}'
+            )
+        );
 
         Chainlink.Request memory req =
-            buildChainlinkRequest(bytes32(bytes(jobId)), address(this), this.fulfillDateInflation.selector);
-        req.add("service", "truflation/at-date");
+            buildChainlinkRequest(bytes32(bytes(jobId)), address(this), this.fulfillRangeInflation.selector);
+        req.add("service", "truflation/range");
         req.add("keypath", "");
         req.add("data", data); // DATE HARDCODED JUST FOR DEVELOPMENT
         req.add("abi", "int256");
@@ -38,11 +42,11 @@ contract Truflation is ChainlinkClient, ConfirmedOwner {
         return sendChainlinkRequestTo(oracleId, req, fee);
     }
 
-    function fulfillDateInflation(bytes32 _requestId, bytes memory _inflation)
+    function fulfillRangeInflation(bytes32 _requestId, bytes memory _inflation)
         public
         recordChainlinkFulfillment(_requestId)
     {
-        dateInflation = toInt256(_inflation);
+        rangeInflation = toInt256(_inflation);
     }
 
     function changeOracle(address _oracle) public onlyOwner {
@@ -66,8 +70,8 @@ contract Truflation is ChainlinkClient, ConfirmedOwner {
         require(link.transfer(msg.sender, link.balanceOf(address(this))), "Unable to transfer");
     }
 
-    function getDateInflation() public view returns (int256) {
-        return dateInflation;
+    function getRangeInflation() public view returns (int256) {
+        return rangeInflation;
     }
 
     function toInt256(bytes memory _bytes) internal pure returns (int256 value) {

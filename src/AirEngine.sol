@@ -8,8 +8,9 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 import {TruflationInterface} from "../interfaces/TruflationInterface.sol";
 import {DateTime} from "@solidity-datetime/contracts/DateTime.sol";
 import {Strings} from "@OpenZeppelin/contracts/utils/Strings.sol";
+import {AutomationCompatible} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
-contract AirEngine is ReentrancyGuard {
+contract AirEngine is ReentrancyGuard, AutomationCompatible {
     // Errors Section
     error AirEngine__MustBeMoreThanZero();
     error AirEngine__TokenNotAllowed();
@@ -86,11 +87,24 @@ contract AirEngine is ReentrancyGuard {
 
     // External Functions Section
 
-    function updateAirPegPrice() external {
-        // block.timestamp - lastTimestamp > i_interval (in seconds)
-        if (block.timestamp - s_lastTimestamp < i_interval) {
+    function checkUpkeep(bytes memory /* checkData */ )
+        public
+        view
+        returns (bool upkeepNeeded, bytes memory /* performData */ )
+    {
+        upkeepNeeded = ((block.timestamp - s_lastTimestamp) >= i_interval);
+        return (upkeepNeeded, "0x0");
+    }
+
+    function performUpkeep(bytes calldata /* PerformData */ ) external {
+        (bool upkeepNeeded,) = checkUpkeep("0x0");
+
+        if (!upkeepNeeded) {
             revert AirEngine__NotEnoughTimeHasPassed();
         }
+
+        _updateRangeInflation();
+        _updateAirPegPriceByInflation();
     }
 
     /**
@@ -265,24 +279,26 @@ contract AirEngine is ReentrancyGuard {
         }
     }
 
-    function _updateDateInflation() internal {
+    function _updateRangeInflation() internal {
         /**
          * What if instead of updating by date, the contract updates by range of time?
          * So if the chainlink subscription runs out of LINK, you can fund it again
          * and dont loose the peg.
          */
-        string memory fulldate = _getDateFormated();
+        string memory startDate = _getDateFormated(s_lastTimestamp);
+        string memory endDate = _getDateFormated(block.timestamp);
+
         IERC20(i_linkTokenAddress).transfer(i_truflationClient, MINIMUM_LINK_TRANSFERENCE);
-        TruflationInterface(i_truflationClient).requestDateInflation(fulldate);
+        TruflationInterface(i_truflationClient).requestRangeInflation(startDate, endDate);
     }
 
-    function _getDateInflation() internal returns (int256 dateInflation) {
-        _updateDateInflation();
-        dateInflation = TruflationInterface(i_truflationClient).getDateInflation();
+    function _getRangeInflation() internal returns (int256 rangeInflation) {
+        _updateRangeInflation();
+        rangeInflation = TruflationInterface(i_truflationClient).getRangeInflation();
     }
 
     function _updateAirPegPriceByInflation() internal {
-        int256 dateInflation = _getDateInflation();
+        int256 dateInflation = _getRangeInflation();
 
         int256 actualPrice = int256(s_airPegPriceInUsd);
 
@@ -293,8 +309,8 @@ contract AirEngine is ReentrancyGuard {
         s_airPegPriceInUsd = uint256(actualPrice * (1e18 + dateInflation));
     }
 
-    function _getDateFormated() internal view returns (string memory) {
-        (uint256 year, uint256 month, uint256 day) = DateTime.timestampToDate(block.timestamp);
+    function _getDateFormated(uint256 customTimestamp) internal pure returns (string memory) {
+        (uint256 year, uint256 month, uint256 day) = DateTime.timestampToDate(customTimestamp);
 
         // ISSUE: month or day are less than 10 so a zero (0) before the number must be added
         return
