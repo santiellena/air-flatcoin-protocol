@@ -15,7 +15,7 @@ contract DeployAir is Script {
     address weth;
     address link;
 
-    function run() public returns (AirToken, AirEngine, MockTruflation) {
+    function run() public returns (AirToken, AirEngine, MockTruflation, HelperConfig) {
         HelperConfig helperConfig = new HelperConfig();
 
         (address wethContractAddress, address priceFeed, address linkAddress, uint256 deployerKey) =
@@ -37,6 +37,6 @@ contract DeployAir is Script {
         airToken.transferOwnership(address(airEngine));
 
         vm.stopBroadcast();
-        return (airToken, airEngine, mockTrufaltion);
+        return (airToken, airEngine, mockTrufaltion, helperConfig);
     }
 }
