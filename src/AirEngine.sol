@@ -18,6 +18,7 @@ contract AirEngine is ReentrancyGuard {
     error AirEngine__BurnedAmountCannotBeGreaterThanAmountMinted();
     error AirEngine__HealthFactorIsBroken();
     error AirEngine__HealthFactorMustBeBrokenToLiquidate();
+    error AirEngine__NotEnoughTimeHasPassed();
 
     // State Variables Section
     AirToken private immutable i_AIR;
@@ -25,6 +26,7 @@ contract AirEngine is ReentrancyGuard {
     address private immutable i_collateralUsdPriceFeedAddress;
     address private immutable i_truflationClient;
     address private immutable i_linkTokenAddress;
+    uint256 private immutable i_interval;
     // Price feed returns a number with 8 decimals and the whole system works with 18
     int256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
@@ -33,6 +35,7 @@ contract AirEngine is ReentrancyGuard {
     uint256 private constant LIQUIDATION_THRESHOLD = 50;
     uint256 private constant LIQUIDATION_PRECISION = 100;
     uint256 private constant MINIMUM_LINK_TRANSFERENCE = 1e18;
+    uint256 private s_lastTimestamp;
 
     mapping(address user => uint256 amount) private s_userToAmountOfCollateralDeposited;
     mapping(address user => uint256 amount) private s_userToAmountMinted;
@@ -68,7 +71,8 @@ contract AirEngine is ReentrancyGuard {
         address collateralUsdPriceFeedAddress,
         address linkTokenAddress,
         address airAddress,
-        uint256 initialAirPrice
+        uint256 initialAirPrice,
+        uint256 interval
     ) {
         i_truflationClient = truflationClient;
         i_collateralTokenAddress = collateralTokenAddress;
@@ -76,9 +80,18 @@ contract AirEngine is ReentrancyGuard {
         i_AIR = AirToken(airAddress);
         i_linkTokenAddress = linkTokenAddress;
         s_airPegPriceInUsd = initialAirPrice;
+        i_interval = interval;
+        s_lastTimestamp = block.timestamp;
     }
 
     // External Functions Section
+
+    function updateAirPegPrice() external {
+        // block.timestamp - lastTimestamp > i_interval (in seconds)
+        if (block.timestamp - s_lastTimestamp < i_interval) {
+            revert AirEngine__NotEnoughTimeHasPassed();
+        }
+    }
 
     /**
      * @param user Address of the user who is breaking the helath factor
@@ -253,6 +266,11 @@ contract AirEngine is ReentrancyGuard {
     }
 
     function _updateDateInflation() internal {
+        /**
+         * What if instead of updating by date, the contract updates by range of time?
+         * So if the chainlink subscription runs out of LINK, you can fund it again
+         * and dont loose the peg.
+         */
         string memory fulldate = _getDateFormated();
         IERC20(i_linkTokenAddress).transfer(i_truflationClient, MINIMUM_LINK_TRANSFERENCE);
         TruflationInterface(i_truflationClient).requestDateInflation(fulldate);
@@ -305,6 +323,11 @@ contract AirEngine is ReentrancyGuard {
         // price == actualTokenPrice * 1e8;
 
         return uint256(uint256(price * ADDITIONAL_FEED_PRECISION) * amount) / PRECISION;
+    }
+
+    function getHealthFactor() external view returns (uint256) {
+        uint256 healthFactor = _healthFactor(msg.sender);
+        return healthFactor;
     }
 
     function getAirPriceInUsd() public view returns (uint256) {

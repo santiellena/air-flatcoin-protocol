@@ -41,6 +41,22 @@ contract AirEngineTest is Test {
         ERC20Mock(wethContractAddress).mint(USER, STARTING_MINTED_BALANCE);
     }
 
+    // MODIFIERS SECTION
+
+    modifier depositCollateral() {
+        vm.startPrank(USER);
+        bool approved = ERC20Mock(wethContractAddress).approve(address(airEngine), AMOUNT_COLLATERAL);
+        assert(approved == true);
+        airEngine.depositCollateral(FIRST_TIME_DEPOSIT);
+        vm.stopPrank();
+        _;
+    }
+
+    modifier updateAirPegPriceByInfation() {
+        // Simulate the Automation Contract calls and modifies the state
+        _;
+    }
+
     // Price Feed Tests
 
     function testGetTokenAmountFromUsd() public {
@@ -50,5 +66,52 @@ contract AirEngineTest is Test {
         uint256 expectedAmount = 10e18;
 
         assertEq(actualAmount, expectedAmount);
+    }
+
+    function testGetAccountCollateralInUsd() public depositCollateral {
+        uint256 expectedCollateralInUsd = airEngine.getCollateralUsdValue(FIRST_TIME_DEPOSIT);
+        (, uint256 actualCollateralInUsd) = airEngine.getAccountInformation(USER);
+
+        assertEq(expectedCollateralInUsd, actualCollateralInUsd);
+    }
+
+    function testGetUsdValue() public {
+        uint256 ethAmount = 15e18;
+
+        uint256 expectedUsd = 30000e18;
+        uint256 actualUsd = airEngine.getCollateralUsdValue(ethAmount);
+
+        assertEq(expectedUsd, actualUsd);
+    }
+
+    // Deposit Collateral Tests
+
+    function testRevertsIfCollateralIsZero() public {
+        vm.startPrank(USER);
+        bool approved = ERC20Mock(wethContractAddress).approve(address(airEngine), AMOUNT_COLLATERAL);
+        assert(approved == true);
+        vm.expectRevert(AirEngine.AirEngine__MustBeMoreThanZero.selector);
+        airEngine.depositCollateral(0);
+    }
+
+    function testGetAccountInformationOnlyWithDeposit() public depositCollateral {
+        (uint256 actualTotalDscMinted, uint256 actualCollateralValueInUsd) = airEngine.getAccountInformation(USER);
+
+        uint256 amoutOfUserCollateral = FIRST_TIME_DEPOSIT;
+
+        uint256 expectedCollateralValueInUsd = airEngine.getCollateralUsdValue(amoutOfUserCollateral);
+
+        assertEq(expectedCollateralValueInUsd, actualCollateralValueInUsd);
+
+        uint256 expectedTotalDscMinted = 0;
+
+        assertEq(expectedTotalDscMinted, actualTotalDscMinted);
+    }
+
+    function testGetHealthFactorOnlyWithDeposit() public depositCollateral {
+        vm.prank(USER);
+        uint256 healthFactor = airEngine.getHealthFactor();
+        uint256 MINIMUM_HEALTH_FACTOR = 1e18; // As DSC amount is 0, the function returns the minimum posible health value.
+        assertEq(healthFactor, MINIMUM_HEALTH_FACTOR);
     }
 }
