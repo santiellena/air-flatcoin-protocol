@@ -12,6 +12,7 @@ contract HelperConfig is Script {
         address wethUsdPriceFeed;
         address linkAddress;
         uint256 deployerKey;
+        uint256 automationInterval;
     }
 
     int256 public constant ETH_USD_PRICE = 2000e8;
@@ -38,7 +39,8 @@ contract HelperConfig is Script {
             wethContractAddress: 0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6, // NOT REALLY KNOWN YET
             wethUsdPriceFeed: 0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e,
             linkAddress: GOERLI_TOKEN,
-            deployerKey: vm.envUint("PRIVATE_KEY")
+            deployerKey: vm.envUint("PRIVATE_KEY"),
+            automationInterval: 86400 // One day in seconds
         });
     }
 
@@ -47,7 +49,9 @@ contract HelperConfig is Script {
             return activeNetworkConfig;
         }
 
-        vm.startBroadcast();
+        uint256 deployer = vm.envUint("DEFAULT_ANVIL_KEY");
+
+        vm.startBroadcast(deployer);
         MockV3Aggregator ethUsdPriceFeed = new MockV3Aggregator(DECIMALS, ETH_USD_PRICE);
         ERC20Mock wethMock = new ERC20Mock();
 
@@ -61,7 +65,8 @@ contract HelperConfig is Script {
             wethUsdPriceFeed: address(ethUsdPriceFeed),
             wethContractAddress: address(wethMock),
             linkAddress: address(linkToken),
-            deployerKey: vm.envUint("DEFAULT_ANVIL_KEY")
+            deployerKey: deployer,
+            automationInterval: 86400 // One day in seconds
         });
     }
 }

@@ -103,7 +103,6 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
             revert AirEngine__NotEnoughTimeHasPassed();
         }
 
-        _updateRangeInflation();
         _updateAirPegPriceByInflation();
     }
 
@@ -306,7 +305,7 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         // new price = old price * (1 + 0.inflation)
         // 65 = 100 * (1 - 0.35) --> -0.35: negative inflation
         // 650000 = 10000 * (100 - 35) --> adjusts with 0s and result is the same without precision
-        s_airPegPriceInUsd = uint256(actualPrice * (1e18 + dateInflation));
+        s_airPegPriceInUsd = uint256((actualPrice * (1e18 + dateInflation)) / int256(PRECISION));
     }
 
     function _getDateFormated(uint256 customTimestamp) internal pure returns (string memory) {

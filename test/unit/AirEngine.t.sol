@@ -21,6 +21,7 @@ contract AirEngineTest is Test {
     address linkAddress;
     uint256 deployerKey;
     MockTruflation mockTruflation;
+    uint256 automationInterval;
 
     address public USER = makeAddr("USER");
     address public ANOTHER_USER = makeAddr("ANOTHER_USER");
@@ -30,13 +31,15 @@ contract AirEngineTest is Test {
     uint256 public constant FIRST_TIME_DEPOSIT = 2 ether;
     uint256 public constant FIRST_TIME_DEPOSIT_OTHER = 3 ether;
     uint256 public constant FIRST_TIME_MINT_AMOUNT = 2000e18;
+    uint256 private constant MINIMUM_LINK_TRANSFERENCE = 1e18;
 
     function setUp() public {
         deployer = new DeployAir();
 
-        (airToken, airEngine, mockTruflation, helperConfig) = deployer.run();
+        (airToken, airEngine, mockTruflation, helperConfig, automationInterval) = deployer.run();
 
-        (wethContractAddress, wethUsdPriceFeed, linkAddress, deployerKey) = helperConfig.activeNetworkConfig();
+        (wethContractAddress, wethUsdPriceFeed, linkAddress, deployerKey, automationInterval) =
+            helperConfig.activeNetworkConfig();
 
         ERC20Mock(wethContractAddress).mint(USER, STARTING_MINTED_BALANCE);
     }
@@ -53,7 +56,21 @@ contract AirEngineTest is Test {
     }
 
     modifier updateAirPegPriceByInfation() {
-        // Simulate the Automation Contract calls and modifies the state
+        airEngine.performUpkeep("0x0");
+        _;
+    }
+
+    modifier timePass() {
+        vm.warp(block.timestamp + automationInterval + 1);
+        vm.roll(block.number + 1);
+        _;
+    }
+
+    modifier fundWithLinkAndApprove(address account) {
+        vm.prank(address(deployer));
+        LinkToken(linkAddress).transfer(account, MINIMUM_LINK_TRANSFERENCE);
+        bool approved = LinkToken(linkAddress).approve(address(airEngine), MINIMUM_LINK_TRANSFERENCE);
+        assert(approved == true);
         _;
     }
 
@@ -113,5 +130,37 @@ contract AirEngineTest is Test {
         uint256 healthFactor = airEngine.getHealthFactor();
         uint256 MINIMUM_HEALTH_FACTOR = 1e18; // As DSC amount is 0, the function returns the minimum posible health value.
         assertEq(healthFactor, MINIMUM_HEALTH_FACTOR);
+    }
+
+    // Upkeep Tests
+
+    function testCheckUpkeepReturnsFalseIfNotEnoughTimeHasPassed() public {
+        vm.prank(USER);
+        (bool upkeepNeeded,) = airEngine.checkUpkeep("0x0");
+
+        assertEq(upkeepNeeded, false);
+    }
+
+    function testCheckUpkeepReturnsTrueIfEnoughTimeHasPassed() public timePass {
+        vm.prank(USER);
+        (bool upkeepNeeded,) = airEngine.checkUpkeep("0x0");
+
+        assertEq(upkeepNeeded, true);
+    }
+
+    function testPerformUpkeepRevertsIfNotEnoughTimeHasPassed() public {
+        vm.prank(USER);
+        vm.expectRevert(AirEngine.AirEngine__NotEnoughTimeHasPassed.selector);
+        airEngine.performUpkeep("0x0");
+    }
+
+    function testPerformUpkeepUpdatesAirPegPrice() public timePass fundWithLinkAndApprove(address(airEngine)) {
+        vm.prank(USER);
+        airEngine.performUpkeep("0x0");
+
+        uint256 expectedAirPegPrice = 101e16;
+        uint256 actualAirPegPrice = airEngine.getAirPriceInUsd();
+
+        assertEq(expectedAirPegPrice, actualAirPegPrice);
     }
 }

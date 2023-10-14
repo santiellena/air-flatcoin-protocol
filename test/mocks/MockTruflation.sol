@@ -21,7 +21,7 @@ contract MockTruflation is ChainlinkClient, ConfirmedOwner {
     }
 
     function requestRangeInflation(string memory startDate, string memory endDate) public returns (bytes32 requestId) {
-        bytes memory inflationInBytes = abi.encode(1e17); // Inflation fixed to testing
+        bytes memory inflationInBytes = abi.encode(1e16); // Inflation fixed to testing
         fulfillRangeInflation(inflationInBytes);
         return bytes32(abi.encodePacked(startDate, endDate));
     }
