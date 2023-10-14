@@ -40,4 +40,15 @@ contract AirEngineTest is Test {
 
         ERC20Mock(wethContractAddress).mint(USER, STARTING_MINTED_BALANCE);
     }
+
+    // Price Feed Tests
+
+    function testGetTokenAmountFromUsd() public {
+        uint256 usdAmountInWei = 20000e18;
+        // 1 ETH => 2000 USD (setted in mock aggregator v3 interface)
+        uint256 actualAmount = airEngine.getCollateralTokenAmountFromUsd(usdAmountInWei);
+        uint256 expectedAmount = 10e18;
+
+        assertEq(actualAmount, expectedAmount);
+    }
 }

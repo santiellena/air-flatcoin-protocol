@@ -176,7 +176,7 @@ contract AirEngine is ReentrancyGuard {
         moreThanZero(usdAmountInWei)
         returns (uint256)
     {
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(i_collateralTokenAddress);
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(i_collateralUsdPriceFeedAddress);
         (, int256 price,,,) = priceFeed.latestRoundData();
 
         return (usdAmountInWei * PRECISION) / uint256(price * ADDITIONAL_FEED_PRECISION);
