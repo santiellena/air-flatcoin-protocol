@@ -73,6 +73,8 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         address linkTokenAddress,
         address airAddress,
         uint256 initialAirPrice,
+        // interval refers to the minimum time in seconds that has
+        // to pass to be able to update by infaltion the price
         uint256 interval
     ) {
         i_truflationClient = truflationClient;
@@ -87,6 +89,12 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
 
     // External Functions Section
 
+    /**
+     *
+     * @notice checkData as parameter is needed to let chainlink automation identify the function
+     * @return upkeepNeeded boolean, true if enough time has passed to execute performUpkeep
+     * @return performData needs to be returned anyways because is needed to let chainlink automation identify the function
+     */
     function checkUpkeep(bytes memory /* checkData */ )
         public
         view
@@ -96,6 +104,10 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         return (upkeepNeeded, "0x0");
     }
 
+    /**
+     *
+     * @notice PerformData as parameter is needed to let chainlink automation identify the function
+     */
     function performUpkeep(bytes calldata /* PerformData */ ) external {
         (bool upkeepNeeded,) = checkUpkeep("0x0");
 
@@ -138,6 +150,12 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         _revertIfHealthFactorIsBroken(msg.sender);
     }
 
+    /**
+     *
+     * @param amountCollateral amount of collateral to be deposited to back the Air minted
+     * @param amountAirToMint amount of Air token to be minted
+     * @dev doesnt check if params are more than zero because the functions that calls immediately check that
+     */
     function depositCollateralAndMintAir(uint256 amountCollateral, uint256 amountAirToMint) external {
         depositCollateral(amountCollateral);
         mintAir(amountAirToMint);
@@ -173,8 +191,9 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
     }
 
     /**
+     *
      * @param amountCollateral The amount of collateral to deposit
-     * @notice CEI pattern
+     * @notice CEI pattern [Checks - Effects - Interactions]
      */
     function depositCollateral(uint256 amountCollateral) public moreThanZero(amountCollateral) nonReentrant {
         s_userToAmountOfCollateralDeposited[msg.sender] += amountCollateral;
@@ -187,15 +206,28 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         }
     }
 
+    /**
+     *
+     * @param amountToBurn amount to burn in the sender account
+     */
     function burnAir(uint256 amountToBurn) public moreThanZero(amountToBurn) {
         _burnAir(amountToBurn, msg.sender, msg.sender);
     }
 
+    /**
+     *
+     * @param amount amount of collateral that will be redeemed
+     */
     function redeemCollateral(uint256 amount) public moreThanZero(amount) nonReentrant {
         _redeemCollateral(amount, msg.sender, msg.sender);
         _revertIfHealthFactorIsBroken(msg.sender);
     }
 
+    /**
+     *
+     * @param usdAmountInWei dollar amount times 10^18
+     * @notice returns the amount of collateral that a given amount of usd is equal to
+     */
     function getCollateralTokenAmountFromUsd(uint256 usdAmountInWei)
         public
         view
@@ -210,6 +242,12 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
 
     // Internal & Private View Functions Section
 
+    /**
+     *
+     * @param amount amount of AIR that will be used to pay debtor debt
+     * @param debtor address of the account that its health factor is broken and its debt will be covered by liquidator
+     * @param liquidator address of the account thas has Air balance and is willing to pay debtor debt
+     */
     function _burnAir(uint256 amount, address debtor, address liquidator) private moreThanZero(amount) {
         if (s_userToAmountMinted[debtor] < amount) {
             revert AirEngine__BurnedAmountCannotBeGreaterThanAmountMinted();
@@ -264,6 +302,13 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         }
     }
 
+    /**
+     *
+     * @param amountCollateral amount of collateral to be redeemed
+     * @param from account that will loose their collateral
+     * @param to account that will receive the collateral
+     * @notice this function might seem weird, but is mainly used in the liquidation process to transfer funds from one account to other
+     */
     function _redeemCollateral(uint256 amountCollateral, address from, address to)
         private
         moreThanZero(amountCollateral)
@@ -278,11 +323,16 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         }
     }
 
+    /**
+     * @notice sends Link tokens to the Truflation contract so it can work
+     * @notice updated the value of inflation in the Trueflation contract
+     */
     function _updateRangeInflation() internal {
         /**
          * What if instead of updating by date, the contract updates by range of time?
          * So if the chainlink subscription runs out of LINK, you can fund it again
          * and dont loose the peg.
+         * @notice this comment suggestion was already implemented but I want to keep it because is really clear
          */
         string memory startDate = _getDateFormated(s_lastTimestamp);
         string memory endDate = _getDateFormated(block.timestamp);
@@ -291,11 +341,19 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         TruflationInterface(i_truflationClient).requestRangeInflation(startDate, endDate);
     }
 
+    /**
+     * @return rangeInflation amount of american inflation generated between the dates given in _updateRangeInflation()
+     * @notice this function updates the state of Trufaltion contract and then reads it
+     */
     function _getRangeInflation() internal returns (int256 rangeInflation) {
         _updateRangeInflation();
         rangeInflation = TruflationInterface(i_truflationClient).getRangeInflation();
     }
 
+    /**
+     * @notice calls _getRangeInflation() to get the inflation that was previously calculated
+     * @dev maybe the require is useless because that condition will never be met
+     */
     function _updateAirPegPriceByInflation() internal {
         int256 dateInflation = _getRangeInflation();
 
@@ -308,6 +366,12 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         s_airPegPriceInUsd = uint256((actualPrice * (1e18 + dateInflation)) / int256(PRECISION));
     }
 
+    /**
+     *
+     * @param customTimestamp Any timestamp
+     * @notice Formats a timestamp (in second) to a yyyy-mm-dd format
+     * @dev uses the DateTime library
+     */
     function _getDateFormated(uint256 customTimestamp) internal pure returns (string memory) {
         (uint256 year, uint256 month, uint256 day) = DateTime.timestampToDate(customTimestamp);
 
@@ -318,10 +382,21 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
 
     // Public & External View Functions Section
 
+    /**
+     *
+     * @param account an address whose information is needed
+     * @return totalAirMintedInUsd by the account
+     * @return collateralValueInUsd deposited and available on the account (not the all time deposited amount) in dollars
+     */
     function getAccountInformation(address account) public view returns (uint256, uint256) {
         return _getAccountInformation(account);
     }
 
+    /**
+     *
+     * @param amount a given amount of the collateral token
+     * @return value the value in dollars of the amount of token collateral given as parameter
+     */
     function getCollateralUsdValue(uint256 amount) public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(i_collateralUsdPriceFeedAddress);
 
@@ -340,6 +415,10 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         return uint256(uint256(price * ADDITIONAL_FEED_PRECISION) * amount) / PRECISION;
     }
 
+    /**
+     * @return healthFactor a value that represents the state of the account of the sender of collateral vs debt
+     * @notice refer to the _healthFactor() function to see how it is calculated
+     */
     function getHealthFactor() external view returns (uint256) {
         uint256 healthFactor = _healthFactor(msg.sender);
         return healthFactor;

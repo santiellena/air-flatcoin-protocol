@@ -46,8 +46,8 @@ contract AirEngineTest is Test {
 
     // MODIFIERS SECTION
 
-    modifier depositCollateral() {
-        vm.startPrank(USER);
+    modifier depositCollateral(address account) {
+        vm.startPrank(account);
         bool approved = ERC20Mock(wethContractAddress).approve(address(airEngine), AMOUNT_COLLATERAL);
         assert(approved == true);
         airEngine.depositCollateral(FIRST_TIME_DEPOSIT);
@@ -55,7 +55,7 @@ contract AirEngineTest is Test {
         _;
     }
 
-    modifier updateAirPegPriceByInfation() {
+    modifier updateAirPegPriceByInflation() {
         airEngine.performUpkeep("0x0");
         _;
     }
@@ -74,6 +74,23 @@ contract AirEngineTest is Test {
         _;
     }
 
+    modifier mintAir(address account) {
+        (, uint256 actualCollateralValueInUsd) = airEngine.getAccountInformation(account);
+        uint256 expectedMintedAirLimit = actualCollateralValueInUsd / 2;
+        vm.prank(account);
+        airEngine.mintAir(expectedMintedAirLimit);
+        _;
+    }
+
+    modifier depositAndMint(address account) {
+        vm.startPrank(account);
+        bool approved = ERC20Mock(wethContractAddress).approve(address(airEngine), AMOUNT_COLLATERAL);
+        assert(approved == true);
+        airEngine.depositCollateralAndMintAir(FIRST_TIME_DEPOSIT, FIRST_TIME_MINT_AMOUNT);
+        vm.stopPrank();
+        _;
+    }
+
     // Price Feed Tests
 
     function testGetTokenAmountFromUsd() public {
@@ -85,7 +102,7 @@ contract AirEngineTest is Test {
         assertEq(actualAmount, expectedAmount);
     }
 
-    function testGetAccountCollateralInUsd() public depositCollateral {
+    function testGetAccountCollateralInUsd() public depositCollateral(USER) {
         uint256 expectedCollateralInUsd = airEngine.getCollateralUsdValue(FIRST_TIME_DEPOSIT);
         (, uint256 actualCollateralInUsd) = airEngine.getAccountInformation(USER);
 
@@ -111,7 +128,7 @@ contract AirEngineTest is Test {
         airEngine.depositCollateral(0);
     }
 
-    function testGetAccountInformationOnlyWithDeposit() public depositCollateral {
+    function testGetAccountInformationOnlyWithDeposit() public depositCollateral(USER) {
         (uint256 actualTotalDscMinted, uint256 actualCollateralValueInUsd) = airEngine.getAccountInformation(USER);
 
         uint256 amoutOfUserCollateral = FIRST_TIME_DEPOSIT;
@@ -125,7 +142,7 @@ contract AirEngineTest is Test {
         assertEq(expectedTotalDscMinted, actualTotalDscMinted);
     }
 
-    function testGetHealthFactorOnlyWithDeposit() public depositCollateral {
+    function testGetHealthFactorOnlyWithDeposit() public depositCollateral(USER) {
         vm.prank(USER);
         uint256 healthFactor = airEngine.getHealthFactor();
         uint256 MINIMUM_HEALTH_FACTOR = 1e18; // As DSC amount is 0, the function returns the minimum posible health value.
@@ -162,5 +179,54 @@ contract AirEngineTest is Test {
         uint256 actualAirPegPrice = airEngine.getAirPriceInUsd();
 
         assertEq(expectedAirPegPrice, actualAirPegPrice);
+    }
+
+    // Mint Tests
+
+    function testMintRevertsIfAmountIsZero() public depositCollateral(USER) {
+        vm.prank(USER);
+        vm.expectRevert(AirEngine.AirEngine__MustBeMoreThanZero.selector);
+        airEngine.mintAir(0);
+    }
+
+    function testMintRevertsIfHealthFactorBreaks() public depositCollateral(USER) {
+        // collateral in eth is == FIRST_TIME_COLLATERAL
+
+        (, uint256 actualCollateralValueInUsd) = airEngine.getAccountInformation(USER);
+
+        // actualCollateralValueInUsd can back half of its amount in DSC because of the threshold
+        uint256 expectedMintedAirLimit = actualCollateralValueInUsd / 2;
+
+        vm.prank(USER);
+        vm.expectRevert(AirEngine.AirEngine__HealthFactorIsBroken.selector);
+        airEngine.mintAir(expectedMintedAirLimit + 1);
+        // If you want to do so, you can try adding more or substracting to check that the limit is well calculated
+    }
+
+    function testHelthFactorIs1e18WhenTheCollateralIsDoubleTheAirMintedInUsd()
+        public
+        depositCollateral(USER)
+        mintAir(USER)
+    {
+        uint256 expectedHealthFactor = 1e18;
+
+        vm.prank(USER);
+        uint256 actualHealthFactor = airEngine.getHealthFactor();
+
+        assertEq(expectedHealthFactor, actualHealthFactor);
+    }
+
+    // Deposit & Mint Tests
+
+    function testDepositAndMintAirRevertsIfCollateralAmountIsNotEnough() public {
+        uint256 collateralAmountInEth = 1 ether; // 1e18
+        uint256 amountAirToMint = 1500e18;
+
+        vm.startPrank(USER);
+        bool approved = ERC20Mock(wethContractAddress).approve(address(airEngine), AMOUNT_COLLATERAL);
+        assert(approved == true);
+        vm.expectRevert(AirEngine.AirEngine__HealthFactorIsBroken.selector);
+        airEngine.depositCollateralAndMintAir(collateralAmountInEth, amountAirToMint);
+        vm.stopPrank();
     }
 }
