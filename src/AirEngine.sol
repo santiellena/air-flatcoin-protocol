@@ -271,9 +271,7 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
         uint256 totalAirMinted = s_userToAmountMinted[user];
         uint256 collateralDeposited = s_userToAmountOfCollateralDeposited[user];
         collateralValueInUsd = getCollateralUsdValue(collateralDeposited);
-        totalAirMintedInUsd = totalAirMinted * s_airPegPriceInUsd;
-
-        return (totalAirMinted, collateralValueInUsd);
+        totalAirMintedInUsd = (totalAirMinted * s_airPegPriceInUsd) / PRECISION;
     }
 
     /**

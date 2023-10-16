@@ -29,7 +29,7 @@ contract AirEngineTest is Test {
     uint256 public constant AMOUNT_COLLATERAL = 10 ether;
     uint256 public constant STARTING_MINTED_BALANCE = 100 ether;
     uint256 public constant FIRST_TIME_DEPOSIT = 2 ether;
-    uint256 public constant FIRST_TIME_DEPOSIT_OTHER = 3 ether;
+    uint256 public constant FIRST_TIME_DEPOSIT_OTHER = 5 ether;
     uint256 public constant FIRST_TIME_MINT_AMOUNT = 2000e18;
     uint256 private constant MINIMUM_LINK_TRANSFERENCE = 1e18;
 
@@ -66,9 +66,9 @@ contract AirEngineTest is Test {
         _;
     }
 
-    modifier fundWithLinkAndApprove(address account) {
+    modifier fundWithLinkAndApprove() {
         vm.prank(address(deployer));
-        LinkToken(linkAddress).transfer(account, MINIMUM_LINK_TRANSFERENCE);
+        LinkToken(linkAddress).transfer(address(airEngine), MINIMUM_LINK_TRANSFERENCE);
         bool approved = LinkToken(linkAddress).approve(address(airEngine), MINIMUM_LINK_TRANSFERENCE);
         assert(approved == true);
         _;
@@ -87,6 +87,39 @@ contract AirEngineTest is Test {
         bool approved = ERC20Mock(wethContractAddress).approve(address(airEngine), AMOUNT_COLLATERAL);
         assert(approved == true);
         airEngine.depositCollateralAndMintAir(FIRST_TIME_DEPOSIT, FIRST_TIME_MINT_AMOUNT);
+        vm.stopPrank();
+        _;
+    }
+
+    modifier breakHealthFactorByLoweringCollateralPrice() {
+        int256 newEthPrice = 1800e8; // From $2000 USD to $1800 USD
+
+        MockV3Aggregator(wethUsdPriceFeed).updateAnswer(newEthPrice);
+        _;
+    }
+
+    modifier breakHealthFactorByIncrementingAirTokenValue() {
+        uint256 iterations = 50;
+        for (uint256 i = 0; i < iterations; i++) {
+            vm.warp(block.timestamp + automationInterval + 1);
+            vm.roll(block.number + 1);
+
+            vm.prank(address(deployer));
+            LinkToken(linkAddress).transfer(address(airEngine), MINIMUM_LINK_TRANSFERENCE);
+            bool approved = LinkToken(linkAddress).approve(address(airEngine), MINIMUM_LINK_TRANSFERENCE);
+            assert(approved == true);
+
+            airEngine.performUpkeep("0x0");
+        }
+        _;
+    }
+
+    modifier depositAndMintForLiquidator(address liquidator) {
+        ERC20Mock(wethContractAddress).mint(liquidator, FIRST_TIME_DEPOSIT_OTHER);
+        vm.startPrank(liquidator);
+        bool approved = ERC20Mock(wethContractAddress).approve(address(airEngine), FIRST_TIME_DEPOSIT_OTHER);
+        assert(approved == true);
+        airEngine.depositCollateralAndMintAir(FIRST_TIME_DEPOSIT_OTHER, FIRST_TIME_MINT_AMOUNT);
         vm.stopPrank();
         _;
     }
@@ -171,7 +204,7 @@ contract AirEngineTest is Test {
         airEngine.performUpkeep("0x0");
     }
 
-    function testPerformUpkeepUpdatesAirPegPrice() public timePass fundWithLinkAndApprove(address(airEngine)) {
+    function testPerformUpkeepUpdatesAirPegPrice() public timePass fundWithLinkAndApprove {
         vm.prank(USER);
         airEngine.performUpkeep("0x0");
 
@@ -227,6 +260,173 @@ contract AirEngineTest is Test {
         assert(approved == true);
         vm.expectRevert(AirEngine.AirEngine__HealthFactorIsBroken.selector);
         airEngine.depositCollateralAndMintAir(collateralAmountInEth, amountAirToMint);
+        vm.stopPrank();
+    }
+
+    function testDepositedAndMintedAmountAreCorrect() public depositAndMint(USER) {
+        vm.startPrank(USER);
+        uint256 amountAirMinted = airEngine.getAmountAirMinted();
+        uint256 collateralDeposited = airEngine.getAmountOfCollateralDeposited();
+        vm.stopPrank();
+
+        assertEq(amountAirMinted, FIRST_TIME_MINT_AMOUNT);
+        assertEq(collateralDeposited, FIRST_TIME_DEPOSIT);
+    }
+
+    // Burn Tests
+
+    function testBurnRevertsIfAmountIsZeroOrLess() public depositAndMint(USER) {
+        vm.prank(USER);
+        vm.expectRevert(AirEngine.AirEngine__MustBeMoreThanZero.selector);
+        airEngine.burnAir(0);
+    }
+
+    function testBurnedAmountCannotBeGreaterThanAmountMinted() public {
+        vm.startPrank(USER);
+        bool approved = ERC20Mock(wethContractAddress).approve(address(airEngine), AMOUNT_COLLATERAL);
+        assert(approved == true);
+        vm.expectRevert(AirEngine.AirEngine__BurnedAmountCannotBeGreaterThanAmountMinted.selector);
+        airEngine.burnAir(100e18);
+    }
+
+    function testAfterBurningAirAmountIsUpdated() public depositAndMint(USER) {
+        uint256 amountToBurn = 100e18;
+        uint256 expectedFinalAirAmount = FIRST_TIME_MINT_AMOUNT - amountToBurn;
+
+        vm.startPrank(USER);
+        airToken.approve(address(airEngine), amountToBurn);
+
+        airEngine.burnAir(amountToBurn);
+
+        uint256 actualFinalAirAmount = airEngine.getAmountAirMinted();
+        vm.stopPrank();
+
+        assertEq(expectedFinalAirAmount, actualFinalAirAmount);
+    }
+
+    // Health Factor Tests
+
+    function testGetHealthFactorReturns1e18IfAmountMintedIsZero() public depositCollateral(USER) {
+        uint256 expectedHealthFactor = 1e18; // MINIMUM_HEALTH_FACTOR
+
+        vm.prank(USER);
+        uint256 actualHealthFactor = airEngine.getHealthFactor();
+
+        assertEq(expectedHealthFactor, actualHealthFactor);
+    }
+
+    // Redeem Collateral Tests
+
+    function testRedeemCollateralRevertsIfAmountIsZero() public depositCollateral(USER) {
+        vm.prank(USER);
+        vm.expectRevert(AirEngine.AirEngine__MustBeMoreThanZero.selector);
+        airEngine.redeemCollateral(0);
+    }
+
+    function testRedeemCollateralUpdatesAmountsCorrectly() public depositCollateral(USER) {
+        uint256 expectedDepositedCollateralAfterRedeem = 0;
+
+        vm.prank(USER);
+        airEngine.redeemCollateral(FIRST_TIME_DEPOSIT);
+
+        vm.prank(USER);
+        uint256 actualDepositedCollateralAfterRedeem = airEngine.getAmountOfCollateralDeposited();
+
+        assertEq(expectedDepositedCollateralAfterRedeem, actualDepositedCollateralAfterRedeem);
+    }
+
+    function testCannotRedeemMoreThanOwned() public depositCollateral(USER) {
+        uint256 greaterAmountOfOwnedWETH = 2.5 ether;
+        vm.prank(USER);
+        vm.expectRevert();
+        airEngine.redeemCollateral(greaterAmountOfOwnedWETH);
+    }
+
+    function testRedeemCollateralForAirAmountsUpdateCorrectly() public depositAndMint(USER) {
+        uint256 redeemCollateralAmount = 0.8 ether; // $1000 USD
+        uint256 burnAirAmount = 1000e18; // $500 USD
+        vm.startPrank(USER);
+        airToken.approve(address(airEngine), burnAirAmount);
+        airEngine.redeemCollateralForAir(redeemCollateralAmount, burnAirAmount);
+
+        uint256 actualAirAmountInAccount = airEngine.getAmountAirMinted();
+        uint256 expectedAirAmountInAccount = FIRST_TIME_MINT_AMOUNT - burnAirAmount;
+
+        uint256 actualCollateralDeposited = airEngine.getAmountOfCollateralDeposited();
+        uint256 expectedCollateralDeposited = FIRST_TIME_DEPOSIT - redeemCollateralAmount;
+        vm.stopPrank();
+
+        assertEq(expectedAirAmountInAccount, actualAirAmountInAccount);
+        assertEq(expectedCollateralDeposited, actualCollateralDeposited);
+    }
+
+    function testRedeemCollateralRevertsIfHealthFactorBreaks() public depositAndMint(USER) {
+        uint256 amountThatMustBreakTheHealthFactor = 1 ether;
+
+        vm.prank(USER);
+        vm.expectRevert(AirEngine.AirEngine__HealthFactorIsBroken.selector);
+        airEngine.redeemCollateral(amountThatMustBreakTheHealthFactor);
+    }
+
+    function testRedeemCollateralForAirRevertsIfAmountsAreZero() public depositAndMint(USER) {
+        vm.prank(USER);
+        vm.expectRevert(AirEngine.AirEngine__MustBeMoreThanZero.selector);
+        airEngine.redeemCollateralForAir(0, 0);
+    }
+
+    function testRedeemCollateralForAirRevertsIfHealthFactorBreaks() public depositAndMint(USER) {
+        uint256 redeemCollateralAmount = 1 ether; // $1000 USD
+        uint256 burnAirAmount = 500e18; // $500 USD
+        vm.startPrank(USER);
+        airToken.approve(address(airEngine), burnAirAmount);
+        vm.expectRevert(AirEngine.AirEngine__HealthFactorIsBroken.selector);
+        airEngine.redeemCollateralForAir(redeemCollateralAmount, burnAirAmount);
+        vm.stopPrank();
+    }
+
+    // Liquidate Tests
+
+    function testCannotLiquidateIfHealthFactorIsNotBroken() public depositAndMint(USER) {
+        uint256 debtToCover = 500e18;
+
+        vm.prank(ANOTHER_USER);
+        vm.expectRevert(AirEngine.AirEngine__HealthFactorMustBeBrokenToLiquidate.selector);
+        airEngine.liquidate(USER, debtToCover);
+    }
+
+    function testLiquidateDebtToCoverRevertsIfIsZero() public depositAndMint(USER) {
+        uint256 debtToCover = 0;
+
+        vm.prank(ANOTHER_USER);
+        vm.expectRevert(AirEngine.AirEngine__MustBeMoreThanZero.selector);
+        airEngine.liquidate(USER, debtToCover);
+    }
+
+    function testLiquidateUserByLoweringPrice()
+        public
+        depositAndMint(USER)
+        breakHealthFactorByLoweringCollateralPrice
+        depositAndMintForLiquidator(ANOTHER_USER)
+    {
+        vm.startPrank(ANOTHER_USER);
+        airToken.approve(address(airEngine), FIRST_TIME_MINT_AMOUNT);
+
+        airEngine.liquidate(USER, FIRST_TIME_MINT_AMOUNT);
+
+        vm.stopPrank();
+    }
+
+    function testLiquidateUserByIncrementingAirTokenValue()
+        public
+        depositAndMint(USER)
+        breakHealthFactorByIncrementingAirTokenValue
+        depositAndMintForLiquidator(ANOTHER_USER)
+    {
+        vm.startPrank(ANOTHER_USER);
+        airToken.approve(address(airEngine), FIRST_TIME_MINT_AMOUNT);
+
+        airEngine.liquidate(USER, FIRST_TIME_MINT_AMOUNT);
+
         vm.stopPrank();
     }
 }
