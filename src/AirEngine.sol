@@ -378,6 +378,32 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
             string(abi.encodePacked(Strings.toString(year), "-", Strings.toString(month), "-", Strings.toString(day)));
     }
 
+    /**
+     *
+     * @param account account of the user that its liquidation price is needed
+     * @return liquidationPrice uint256 value with 18 decimals
+     * @dev Liquidation price is calculated from the health factor function as an equation
+     *
+     * Initial Health Factor Ecuation =
+     * ((((collateralDeposited * collateralPrice) * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION) * PRECISION) / totalMintedAirInUsd;
+     *
+     * Final Liquidation Price Ecuation (collateralPrice isolated, Health Factor value = 1e18 -> the minimum) =
+     * ((((healthFactor * totalMintedAirInUsd) / PRECISION) * LIQUIDATION_PRECISION) / LIQUIDATION_THRESHOLD) / collateralDeposited;
+     */
+    function _getLiquidationAccountPrice(address account) internal view returns (uint256) {
+        (uint256 totalAirMintedInUsd,) = _getAccountInformation(account);
+        uint256 healthFactor = _healthFactor(account);
+
+        uint256 collateralDeposited = s_userToAmountOfCollateralDeposited[account];
+
+        // From the Health Factor equation I developed a new one for liquidation price
+        uint256 liquidationPrice = (
+            (((healthFactor * totalAirMintedInUsd) / PRECISION) * LIQUIDATION_PRECISION) / LIQUIDATION_THRESHOLD
+        ) / collateralDeposited;
+
+        return liquidationPrice;
+    }
+
     // Public & External View Functions Section
 
     /**
@@ -436,5 +462,13 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
 
     function getAmountOfCollateralDeposited() public view returns (uint256) {
         return s_userToAmountOfCollateralDeposited[msg.sender];
+    }
+
+    /**
+     * @notice returns the collateral limit price that breaks the health factor of the sender account
+     * @return liquidationPrice uint256 value with 18 decimals
+     */
+    function getLiquidationAccountPrice() public view returns (uint256) {
+        return _getLiquidationAccountPrice(msg.sender);
     }
 }
