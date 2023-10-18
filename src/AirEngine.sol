@@ -141,15 +141,34 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
 
         uint256 totalCollateralToRedeem = tokenAmountFromDebtCovered + bonusCollateral;
 
-        _redeemCollateral(totalCollateralToRedeem, user, msg.sender);
+        /**
+         * This conditional needs to be implemented because in case the protocol is not able to pay the
+         * 10% bonus (meaning that the position is covering between 100% to 110% of the position), any attempt to 
+         * cover that debt will be reverted because (1) There wont be funds to pay or (2) The health factor wont be improved.
+         */
+        if (totalCollateralToRedeem > s_userToAmountOfCollateralDeposited[user]) {
+            // If this happens redeem the total amount of collateral of the debtor acount
+            _redeemCollateral(s_userToAmountOfCollateralDeposited[user], user, msg.sender);
 
-        _burnAir(debtToCover, user, msg.sender);
+            _burnAir(debtToCover, user, msg.sender);
 
-        uint256 endingHealthFactor = _healthFactor(user);
-        if (endingHealthFactor <= startingUserHealthFactor) {
-            revert AirEngine__HealthFactorMustBeBrokenToLiquidate();
-        }
-        _revertIfHealthFactorIsBroken(msg.sender);
+            uint256 endingHealthFactor = _healthFactor(user);
+            if (endingHealthFactor <= startingUserHealthFactor) {
+                revert AirEngine__HealthFactorMustBeBrokenToLiquidate();
+            }
+            _revertIfHealthFactorIsBroken(msg.sender);
+        } else {
+            // The debtor will still have collateral
+            _redeemCollateral(totalCollateralToRedeem, user, msg.sender);
+
+            _burnAir(debtToCover, user, msg.sender);
+
+            uint256 endingHealthFactor = _healthFactor(user);
+            if (endingHealthFactor <= startingUserHealthFactor) {
+                revert AirEngine__HealthFactorMustBeBrokenToLiquidate();
+            }
+            _revertIfHealthFactorIsBroken(msg.sender);
+        } 
     }
 
     /**
