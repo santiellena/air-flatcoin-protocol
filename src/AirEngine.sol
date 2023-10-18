@@ -20,6 +20,8 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
     error AirEngine__HealthFactorIsBroken();
     error AirEngine__HealthFactorMustBeBrokenToLiquidate();
     error AirEngine__NotEnoughTimeHasPassed();
+    error AirEngine__ZeroCollateralInAccount();
+    error AirEngine__ZeroMintedAirInAccount();
 
     // State Variables Section
     AirToken private immutable i_AIR;
@@ -388,17 +390,28 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
      * ((((collateralDeposited * collateralPrice) * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION) * PRECISION) / totalMintedAirInUsd;
      *
      * Final Liquidation Price Ecuation (collateralPrice isolated, Health Factor value = 1e18 -> the minimum) =
-     * ((((healthFactor * totalMintedAirInUsd) / PRECISION) * LIQUIDATION_PRECISION) / LIQUIDATION_THRESHOLD) / collateralDeposited;
+     * (((healthFactor * totalMintedAirInUsd) * LIQUIDATION_PRECISION) / LIQUIDATION_THRESHOLD) / collateralDeposited;
      */
     function _getLiquidationAccountPrice(address account) internal view returns (uint256) {
-        (uint256 totalAirMintedInUsd,) = _getAccountInformation(account);
-        uint256 healthFactor = _healthFactor(account);
-
         uint256 collateralDeposited = s_userToAmountOfCollateralDeposited[account];
 
+        if (collateralDeposited <= 0) {
+            revert AirEngine__ZeroCollateralInAccount();
+        }
+
+        (uint256 totalAirMintedInUsd,) = _getAccountInformation(account);
+
+        if (totalAirMintedInUsd <= 0) {
+            revert AirEngine__ZeroMintedAirInAccount();
+        }
+
+        uint256 liquidationHealthFactor = 1e18;
+
         // From the Health Factor equation I developed a new one for liquidation price
+        // BETTER EXPLAINED IN NAT-SPECs
+        // / PRECISION -> (this division is making the ecuation loose their decimals)
         uint256 liquidationPrice = (
-            (((healthFactor * totalAirMintedInUsd) / PRECISION) * LIQUIDATION_PRECISION) / LIQUIDATION_THRESHOLD
+            (((liquidationHealthFactor * totalAirMintedInUsd)) * LIQUIDATION_PRECISION) / LIQUIDATION_THRESHOLD
         ) / collateralDeposited;
 
         return liquidationPrice;

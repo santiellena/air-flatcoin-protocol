@@ -429,4 +429,45 @@ contract AirEngineTest is Test {
 
         vm.stopPrank();
     }
+
+    // Liquidation Price Tests
+
+    function testGetLiquidationPriceRevertsIfDepositedCollateralIsZero() public {
+        vm.prank(USER);
+        vm.expectRevert(AirEngine.AirEngine__ZeroCollateralInAccount.selector);
+        airEngine.getLiquidationAccountPrice();
+    }
+
+    function testGetLiquidationPriceRevertsIfMintedAirIsZero() public depositCollateral(USER) {
+        vm.prank(USER);
+        vm.expectRevert(AirEngine.AirEngine__ZeroMintedAirInAccount.selector);
+        airEngine.getLiquidationAccountPrice();
+    }
+
+    /**
+     *  This test has a weird expected liquidation price but it's quite simple.
+     *
+     *  If you deposit 6 ether valued 12000 usd to back 2000 usd minted in air,
+     * and the position must be 200% overcollateralized so if you minted 2000 usd
+     * of air, the minimum amount in usd of your collateral is 4000 usd.
+     *
+     *  That means that the 6 ether deposited have to drop from 12000 to 4000 usd to reach
+     * the limit price before being liquidated.
+     *
+     * 4000 / 6 = 666,66 periodic --> As we work with 18 decimals, the number is periodic until
+     * it reachs 18 digits
+     */
+    function testGetLiquidationPriceReturnsAValidValue()
+        public
+        depositAndMint(USER) // Deposits 2 ether and mint 2000 air (air price at the moment = 1 usd)
+        depositCollateral(USER) // Deposits 2 ether
+        depositCollateral(USER) // Deposits 2 ether
+    {
+        uint256 expectedLiquidationPrice = 666666666666666666;
+
+        vm.prank(USER);
+        uint256 actualLiquidationPrice = airEngine.getLiquidationAccountPrice();
+
+        assertEq(actualLiquidationPrice, expectedLiquidationPrice);
+    }
 }
