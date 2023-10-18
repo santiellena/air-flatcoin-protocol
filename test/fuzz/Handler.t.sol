@@ -11,9 +11,7 @@ import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 contract Handler is Test {
     AirEngine airEngine;
     AirToken airToken;
-
     ERC20Mock wethContractAddress;
-
     MockV3Aggregator wethPriceFeed;
 
     uint128 MAX_COLLATERAL_AMOUNT = type(uint96).max;
@@ -26,7 +24,7 @@ contract Handler is Test {
         address tokenCollateralAddress = airEngine.getCollateralTokenAddress();
         wethContractAddress = ERC20Mock(tokenCollateralAddress);
 
-        wethPriceFeed = MockV3Aggregator(airEngine.getCollateralPriceFeedAddress());
+        wethPriceFeed = MockV3Aggregator(address(airEngine.getCollateralPriceFeedAddress()));
     }
 
     function depositCollateral(uint256 amount) public {
@@ -35,7 +33,9 @@ contract Handler is Test {
         vm.startPrank(msg.sender);
 
         wethContractAddress.mint(msg.sender, validAmount);
-        wethContractAddress.approve(address(airEngine), validAmount);
+
+        bool approved = wethContractAddress.approve(address(airEngine), validAmount);
+        assert(approved == true);
 
         airEngine.depositCollateral(validAmount);
 
@@ -51,6 +51,7 @@ contract Handler is Test {
 
         uint256 validAmount = bound(amount, 1, maxValidAmount);
 
+        airToken.approve(address(airEngine), validAmount);
         airEngine.redeemCollateral(validAmount);
     }
 
