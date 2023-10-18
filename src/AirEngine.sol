@@ -484,4 +484,8 @@ contract AirEngine is ReentrancyGuard, AutomationCompatible {
     function getLiquidationAccountPrice() public view returns (uint256) {
         return _getLiquidationAccountPrice(msg.sender);
     }
+
+    function getCollateralPriceFeedAddress() public view returns (address) {
+        return i_collateralUsdPriceFeedAddress;
+    }
 }
