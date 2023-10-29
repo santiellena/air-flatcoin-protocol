@@ -29,6 +29,8 @@ contract Truflation is ChainlinkClient, ConfirmedOwner {
      * I know I can make a request of this type and receive the data I want. I just don't know how
      * I built a mock so I can develop the protocol with that. However its behavior is not 100% equal to the real
      * Truflation contract.
+     * An implementation for testing deployed on Avalanche Fuji can be found here:
+     * https://testnet.avascan.info/blockchain/c/address/0x80e5cA83cFad325E92036e76BF301DD3DE2b1a69/contract
      */
     function requestRangeInflation(string memory startDate, string memory endDate) public returns (bytes32 requestId) {
         string memory data = string(
