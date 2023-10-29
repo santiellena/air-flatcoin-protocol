@@ -27,7 +27,7 @@ contract Truflation is ChainlinkClient, ConfirmedOwner {
     function requestRangeInflation(string memory startDate, string memory endDate) public returns (bytes32 requestId) {
         string memory data = string(
             abi.encodePacked(
-                '{"interval":"day","', startDate, '":"2021-01-01","end-date":', endDate, ',"location":"us"}'
+                '{"interval":"day", "start-date":"', startDate, '","end-date":"', endDate, '","location":"us"}'
             )
         );
 
@@ -35,7 +35,7 @@ contract Truflation is ChainlinkClient, ConfirmedOwner {
             buildChainlinkRequest(bytes32(bytes(jobId)), address(this), this.fulfillRangeInflation.selector);
         req.add("service", "truflation/range");
         req.add("keypath", "");
-        req.add("data", data); // DATE HARDCODED JUST FOR DEVELOPMENT
+        req.add("data", data);
         req.add("abi", "int256");
         req.add("multiplier", "1000000000000000000");
         req.add("refundTo", Strings.toHexString(uint160(msg.sender), 20));
