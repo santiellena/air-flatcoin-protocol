@@ -24,6 +24,12 @@ contract Truflation is ChainlinkClient, ConfirmedOwner {
         fee = fee_;
     }
 
+    /**
+     * Truflation docs are horrible and the sopport team is not helping with this request
+     * I know I can make a request of this type and receive the data I want. I just don't know how
+     * I built a mock so I can develop the protocol with that. However its behavior is not 100% equal to the real
+     * Truflation contract.
+     */
     function requestRangeInflation(string memory startDate, string memory endDate) public returns (bytes32 requestId) {
         string memory data = string(
             abi.encodePacked(
