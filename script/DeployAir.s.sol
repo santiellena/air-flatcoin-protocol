@@ -34,18 +34,25 @@ contract DeployAir is Script {
 
         vm.startBroadcast(deployerKey);
 
-        MockTruflation mockTrufaltion = new MockTruflation(address(0), "", 500000000000000000, address(link));
+        MockTruflation mockTruflation = new MockTruflation(address(0), "", 500000000000000000, address(link));
+
+        console.log("Truflation Contract Address: ", address(mockTruflation));
 
         AirToken airToken = new AirToken();
 
+        console.log("AIR Contract Address: ", address(airToken));
+
         AirEngine airEngine =
-        new AirEngine(address(mockTrufaltion), weth, wethUsdPriceFeed, link, address(airToken), INITIAL_AIR_PRICE, automationInterval);
+        new AirEngine(address(mockTruflation), weth, wethUsdPriceFeed, link, address(airToken), INITIAL_AIR_PRICE, automationInterval);
+
+        console.log("AIREngine Address: ", address(airEngine));
 
         airToken.transferOwnership(address(airEngine));
 
-        LinkToken(linkAddress).transfer(address(this), INITIAL_LINK_SUPPLY);
+        LinkToken(linkAddress).transfer(address(this), INITIAL_LINK_SUPPLY / 2);
 
         vm.stopBroadcast();
-        return (airToken, airEngine, mockTrufaltion, helperConfig, automationInterval);
+
+        return (airToken, airEngine, mockTruflation, helperConfig, automationInterval);
     }
 }
