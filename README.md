@@ -112,4 +112,4 @@ This option is not yet available through the command line.&#x20;
 
 * Try executing other commands to update AIR price by inflation, to liquidate a user, to mint some more tokens, etc.
 * Audit the protocol! This codebase probably has a couple of security issues I haven't find out.
-* Start the project! ⭐
+* Star the project! ⭐
