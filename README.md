@@ -82,7 +82,7 @@ You will immediately see you have balance because the "make deploy" command in a
 
 Now, you need to import the AIR token to Metamask (same procedure but use the AIR Contract Address from the logs).
 
-As we still don't have AIR tokens, we need to deposit some collateral to the engine to mint some.&#x20;
+As we still don't have AIR tokens, we need to deposit some collateral to the engine to mint some.
 
 Open the makefile file. There you will find the depositAndMint command. Use the logs to configure it:
 
@@ -98,15 +98,43 @@ Your balance on Metamask should be like this:
 
 <figure><img src=".gitbook/assets/metamask-status.png" alt=""><figcaption><p>Metamask status after deposit and mint</p></figcaption></figure>
 
-**Congrats! You have deployed the protocol and its testing components. Now you can start playing around with some other commands to see how the protocol behaves.**&#x20;
+**Congrats! You have deployed the protocol and its testing components. Now you can start playing around with some other commands to see how the protocol behaves.**
 
 **Thank you for taking the time to read and use the Anti Inflation Rate protocol!**
 
+
+
+Other commands to execute and try the protocol:
+
+```bash
+# Add collateral to your account to increase your health factor
+$ make deposit 
+
+# Mint some AIR into your account and decrease your health factor
+$ make mint
+
+# Burn some AIR to increase your health factor
+$ make burn
+
+# By asking the mock truflation contract the daily inflation
+$ make increaseAirPrice
+
+# Liquidate a user whose account has been created when the contract was deployed
+$ make liquidate 
+
+# Get your health factor account
+$ make healthFactor
+
+# Creates a second account in the protocol with a health factor of 1 (one)
+# which is the limit before liquidation is available
+$ make depositAndMintSecondAccount
+```
+
+* **Recommendation:** Deposit a lot of WETH on the protocol so you can use it without breaking the health factor.&#x20;
+
 #### Testnet:
 
-This option is not yet available through the command line.&#x20;
-
-
+This option is not yet available through the command line.
 
 **Recommendations:**
 
