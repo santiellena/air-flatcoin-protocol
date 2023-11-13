@@ -26,6 +26,7 @@ contract HelperConfig is Script {
     uint256 public constant AVALANCHE_FUJI_CHAINID = 43113;
     address public constant AVALANCHE_FUJI_LINK_TOKEN = 0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846;
     address public constant DEFAULT_ANVIL_PUBLIC_KEY = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+    address public constant SECONDARY_ANVIL_PUBLIC_KEY = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
 
     NetworkConfig public activeNetworkConfig;
 
@@ -74,6 +75,8 @@ contract HelperConfig is Script {
         console.log("WETH Contract Address: ", address(wethMock));
 
         wethMock.mint(DEFAULT_ANVIL_PUBLIC_KEY, 2000e18); // AFTER THIS I JUST NEED TO MAKE THE TRANSACTION TO CALL THE AIR ENGINE TO MINT SOME TOKENS
+
+        wethMock.mint(SECONDARY_ANVIL_PUBLIC_KEY, 4000e18);
 
         LinkToken linkToken = new LinkToken();
 
